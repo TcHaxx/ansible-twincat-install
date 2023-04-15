@@ -1,0 +1,49 @@
+# Install TwinCAT on a remote Windows machine.
+# Files to upload from {{upload_dir}}, i.e.:
+#  - TC31-FULL-Setup.3.1.4024.42.exe
+#  - PsExec.exe (see https://learn.microsoft.com/en-us/sysinternals/downloads/psexec)
+---
+- name: Install TwinCAT
+  hosts: all
+  vars:
+    user_temp: ''
+    upload_dir: .install-files/
+    tc3_version: '3.1.4024.42'
+
+  tasks:
+
+    - name: Get the temp-directory of current user
+      ansible.builtin.win_shell: echo %temp%
+      args:
+        executable: cmd
+      register: cmd_output
+
+    - name: Set user-temp folder variable
+      ansible.builtin.set_fact:
+        user_temp: '{{ cmd_output.stdout | trim }}\~install-files'
+
+    - name: Upload installation files
+      ansible.builtin.win_copy:
+        src: '{{ upload_dir }}'
+        dest: '{{ user_temp }}'
+        directory_mode:
+
+    - name: Install TwinCAT3
+      ansible.builtin.win_psexec:
+        chdir: '{{ user_temp }}'
+        executable: '{{ user_temp }}\PsExec.exe'
+        command: cmd /c START /B /WAIT TC31-FULL-Setup.{{tc3_version}}.exe /clone_wait /s /v"/qr REBOOT=ReallySuppress ALLUSERS=1 /l*v logs\TC31-install.log"
+        interactive: true
+        session: 1
+        system: true
+
+    - name: Download TC3 installation log file
+      ansible.builtin.fetch:
+        src: '{{ user_temp }}\TC31-install.log'
+        dest: ./~logs/{{ ansible_hostname }}/TC31-install.log
+        flat: true
+
+    - name: Remove temp-directory
+      ansible.builtin.win_file:
+        path: '{{ user_temp }}'
+        state: absent
